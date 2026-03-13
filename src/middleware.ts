@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login page and auth API
-  if (pathname === "/login" || pathname.startsWith("/api/auth")) {
+  // Allow login page, auth API, and ingest webhook
+  if (pathname === "/login" || pathname.startsWith("/api/auth") || pathname.startsWith("/api/ingest")) {
     return NextResponse.next();
   }
 
