@@ -5,16 +5,13 @@ import Anthropic from "@anthropic-ai/sdk";
 // Postmark inbound webhook — no dashboard auth, uses INGEST_TOKEN instead
 export async function POST(request: NextRequest) {
   // Verify ingest token (passed as query param or header)
-  const token = process.env.INGEST_TOKEN;
+  const token = process.env.INGEST_TOKEN?.trim();
   if (token) {
     const url = request.nextUrl || new URL(request.url);
-    const paramToken = url.searchParams.get("token");
-    const headerToken = request.headers.get("x-ingest-token");
+    const paramToken = url.searchParams.get("token")?.trim();
+    const headerToken = request.headers.get("x-ingest-token")?.trim();
     if (paramToken !== token && headerToken !== token) {
-      return NextResponse.json(
-        { error: "Unauthorized", debug: { hasToken: !!token, paramToken: paramToken?.slice(0, 5), headerToken: headerToken?.slice(0, 5) } },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
 
