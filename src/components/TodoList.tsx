@@ -89,9 +89,10 @@ export default function TodoList({ todos, onAdd, onUpdate, onDelete }: Props) {
             )}
             <button
               onClick={() => onDelete(todo.id)}
-              className="text-xs text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 shrink-0"
+              className="text-sm font-bold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded px-1 opacity-0 group-hover:opacity-100 shrink-0 transition-all"
+              title="Delete todo"
             >
-              x
+              ✕
             </button>
           </li>
         ))}
