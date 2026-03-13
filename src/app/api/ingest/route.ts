@@ -109,7 +109,7 @@ Respond with ONLY valid JSON, no other text:
 {
   "project": "exact project name from the list above",
   "todos": ["specific actionable tasks"],
-  "decisions": ["decisions mentioned, if any"],
+  "decisions": ["decisions or open questions mentioned, if any"],
   "notes": ["one brief summary sentence per key point — NOT raw email text"]
 }
 

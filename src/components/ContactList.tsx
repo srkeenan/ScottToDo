@@ -40,7 +40,7 @@ export default function ContactList({ contacts, onAdd, onUpdate, onDelete }: Pro
   return (
     <div>
       <h3 className="text-xs font-semibold uppercase text-gray-400 mb-2">
-        Contacts ({contacts.length})
+        Upcoming Meetings ({contacts.length})
       </h3>
 
       <div className="flex gap-1 mb-2">
@@ -48,7 +48,7 @@ export default function ContactList({ contacts, onAdd, onUpdate, onDelete }: Pro
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          placeholder="Add contact..."
+          placeholder="Add meeting..."
           className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
         />
         <button
