@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: scotttodo
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: NODE_ENV
+        value: production
