@@ -7,11 +7,14 @@ export async function POST(request: NextRequest) {
   // Verify ingest token (passed as query param or header)
   const token = process.env.INGEST_TOKEN;
   if (token) {
-    const url = new URL(request.url);
+    const url = request.nextUrl || new URL(request.url);
     const paramToken = url.searchParams.get("token");
     const headerToken = request.headers.get("x-ingest-token");
     if (paramToken !== token && headerToken !== token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized", debug: { hasToken: !!token, paramToken: paramToken?.slice(0, 5), headerToken: headerToken?.slice(0, 5) } },
+        { status: 401 }
+      );
     }
   }
 
