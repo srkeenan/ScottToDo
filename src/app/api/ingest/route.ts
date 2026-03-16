@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   const hasTodoSignal = /\btodo\b/i.test(subject);
 
   // Check for "AI - " instructions at the start of the email body (before forwarded content)
-  const aiInstructionMatch = textBody.match(/^\s*AI\s*[-–—:]\s*(.+?)(?:\n\n|\n-{3,}|\n_{3,}|$)/is);
+  const aiInstructionMatch = textBody.match(/^\s*AI\s*[-–—:]\s*(.+?)(?:\n\n|\n-{3,}|\n_{3,}|$)/i);
   const aiInstruction = aiInstructionMatch ? aiInstructionMatch[1].trim() : null;
 
   // Get project list from DB
