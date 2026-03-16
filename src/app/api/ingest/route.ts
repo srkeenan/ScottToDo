@@ -68,12 +68,17 @@ export async function POST(request: NextRequest) {
   const projectNames = projects.map((p) => p.name);
 
   // Use Claude to classify and extract action items
-  let classification: {
-    project: string;
-    todos: string[];
-    decisions: string[];
-    notes: string[];
-  };
+  type ClassificationResult =
+    | { skip: true; reason: string }
+    | {
+        items: Array<{
+          project: string;
+          type: "todo" | "decision" | "note";
+          text: string;
+        }>;
+      };
+
+  let classification: ClassificationResult;
 
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -86,17 +91,31 @@ export async function POST(request: NextRequest) {
           role: "user",
           content: `You are Scott's personal project tracker assistant. You process emails Scott forwards to you and add items to his dashboard.
 
-Scott often forwards emails to you with his own instructions at the top, like:
+Scott often forwards emails with his own instructions at the top, like:
 - "Put this under Campgrounds"
 - "Add a todo to follow up with this person"
-- "Note this for CMO / Storage Syndicator"
+- "Todos to add: 1. ... 2. ..."
 
 CRITICAL RULES:
-1. If Scott writes instructions in the email (before a forwarded message), FOLLOW THEM. If he says which project, use that project. If he says to create a todo, CREATE a todo.
-2. Read the FULL email content (including any forwarded message) to understand what the todo/note should actually say.
+1. If Scott writes instructions in the email (before a forwarded message), FOLLOW THEM. His instructions override everything else.
+2. Read the FULL email content (including any forwarded message) to understand context.
 3. Todos should be specific, actionable tasks — not just "follow up" but "Follow up with [person] about [topic]".
-4. Notes should be ONE brief sentence summarizing the key info. Do NOT copy raw email text.
+4. Notes should be ONE brief sentence summarizing key info, in your own words.
 5. If Scott says "add a todo" but doesn't specify what, derive the action from the email content.
+6. Items can span MULTIPLE projects. Each item gets its own project assignment.
+
+SKIP RULES — return skip:true when:
+- The email is automated/marketing (newsletters, promotional offers, system notifications)
+- The email is a system alert (domain activation, account notifications, password resets, shipping confirmations with no action needed)
+- Scott is just CC'd on a thread and the content has no action items or useful info for him
+- The email content has no actionable items AND no information worth noting
+- Gmail forwarding confirmation/verification messages
+
+NOTE RULES — be selective:
+- If Scott's email is clearly just instructions to create todos (e.g., "Todos to add: ..."), do NOT also create a companion note. The todos ARE the output.
+- Only create notes when there is genuinely useful reference information BEYOND any action items.
+- A note should capture info Scott would want to look up later, not just restate what a todo already says.
+- If there is nothing worth noting or acting on, use skip instead of creating a low-value note.
 
 Projects: ${projectNames.join(", ")}
 
@@ -105,20 +124,26 @@ Subject: ${subject}
 Body:
 ${textBody.slice(0, 3000)}
 
-Respond with ONLY valid JSON, no other text:
+Respond with ONLY valid JSON (no markdown, no backticks), in one of two formats:
+
+Format 1 — Skip this email:
+{ "skip": true, "reason": "brief explanation" }
+
+Format 2 — Create items:
 {
-  "project": "exact project name from the list above",
-  "todos": ["specific actionable tasks"],
-  "decisions": ["decisions or open questions mentioned, if any"],
-  "notes": ["one brief summary sentence per key point — NOT raw email text"]
+  "items": [
+    { "project": "project name from list", "type": "todo", "text": "specific actionable task" },
+    { "project": "project name from list", "type": "note", "text": "brief summary sentence" }
+  ]
 }
 
-More rules:
-- If Scott tells you which project, use EXACTLY that project name from the list
-- Pick the BEST matching project otherwise. If nothing fits, use "Personal / Networking"
-- Keep notes SHORT — one sentence each, in your own words, not copied from the email
-- If the email is just FYI with no actions, todos can be empty but add a brief note
-- Never include email headers, addresses, or forwarding boilerplate in notes`,
+Rules for Format 2:
+- "project" should match one of the project names above. Fuzzy matching is OK — use your best guess if Scott abbreviates or misspells (e.g. "hearthfire" matches "Hearthfire fCMO", "personal" matches "Personal / Networking").
+- "type" must be "todo", "decision", or "note"
+- Each item can have a DIFFERENT project — match each item to its best project
+- If nothing fits, use "Personal / Networking"
+- Keep note text SHORT — one sentence, your own words
+- Never include email headers, addresses, or forwarding boilerplate in text`,
         },
       ],
     });
@@ -133,7 +158,7 @@ More rules:
 
     const keywords: Record<string, string[]> = {
       Campgrounds: ["campground", "campsite", "rv", "hookup", "glamping", "michigan camp"],
-      "CMO / Storage Syndicator": ["storage", "syndicator", "cmo", "self-storage", "investor"],
+      "Hearthfire fCMO": ["hearthfire", "fcmo", "fractional cmo"],
       Instructure: ["instructure", "canvas", "lms", "learning", "edtech"],
     };
 
@@ -145,53 +170,68 @@ More rules:
     }
 
     classification = {
-      project: matchedProject,
-      todos: [],
-      decisions: [],
-      notes: [`[Email from ${fromName || from}] ${subject}: ${textBody.slice(0, 200)}`],
+      items: [{
+        project: matchedProject,
+        type: "note" as const,
+        text: `[Email from ${fromName || from}] ${subject}: ${textBody.slice(0, 200)}`,
+      }],
     };
   }
 
-  // Find the project ID
-  const matched = projects.find(
-    (p) => p.name.toLowerCase() === classification.project.toLowerCase()
-  );
-  const projectId = matched?.id || projects[projects.length - 1].id; // fallback to last (Personal)
+  // Handle skip
+  if ("skip" in classification && classification.skip) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: classification.reason,
+      created: { todos: 0, decisions: 0, notes: 0 },
+    });
+  }
 
+  // Resolve project IDs per item
+  const classificationItems = (classification as { items: Array<{ project: string; type: "todo" | "decision" | "note"; text: string }> }).items;
+  const fallbackProjectId = projects[projects.length - 1].id;
+
+  const resolvedItems = (classificationItems || []).map((item) => {
+    // Try exact match first, then fuzzy (partial) match
+    const exact = projects.find(
+      (p) => p.name.toLowerCase() === item.project.toLowerCase()
+    );
+    const fuzzy = !exact
+      ? projects.find((p) =>
+          p.name.toLowerCase().includes(item.project.toLowerCase()) ||
+          item.project.toLowerCase().includes(p.name.toLowerCase().split(/\s+/)[0])
+        )
+      : null;
+    const matched = exact || fuzzy;
+    return {
+      project_id: matched?.id || fallbackProjectId,
+      project_name: matched?.name || item.project,
+      type: item.type,
+      text: item.text,
+    };
+  });
+
+  // Insert items
   const supabase = getSupabase();
-  const results: { todos: number; decisions: number; notes: number } = {
-    todos: 0,
-    decisions: 0,
-    notes: 0,
-  };
+  const results = { todos: 0, decisions: 0, notes: 0 };
+  const projectsUsed = new Set<string>();
 
-  // Insert todos
-  for (const text of classification.todos) {
+  for (const item of resolvedItems) {
+    const table = item.type === "todo" ? "todos" : item.type === "decision" ? "decisions" : "notes";
     const { error } = await supabase
-      .from("todos")
-      .insert({ project_id: projectId, text });
-    if (!error) results.todos++;
-  }
-
-  // Insert decisions
-  for (const text of classification.decisions) {
-    const { error } = await supabase
-      .from("decisions")
-      .insert({ project_id: projectId, text });
-    if (!error) results.decisions++;
-  }
-
-  // Insert notes
-  for (const text of classification.notes) {
-    const { error } = await supabase
-      .from("notes")
-      .insert({ project_id: projectId, text });
-    if (!error) results.notes++;
+      .from(table)
+      .insert({ project_id: item.project_id, text: item.text });
+    if (!error) {
+      results[`${item.type}s` as keyof typeof results]++;
+      projectsUsed.add(item.project_name);
+    }
   }
 
   return NextResponse.json({
     ok: true,
-    project: classification.project,
+    skipped: false,
+    projects: Array.from(projectsUsed),
     created: results,
   });
 }
