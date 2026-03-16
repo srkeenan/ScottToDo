@@ -55,6 +55,14 @@ export async function POST(request: NextRequest) {
   // Strip Gmail forwarding noise — extract just the user's message + forwarded content
   textBody = cleanForwardedEmail(textBody);
 
+  // Detect explicit signals from Scott
+  const subjectLower = subject.toLowerCase();
+  const hasTodoSignal = /\btodo\b/i.test(subject);
+
+  // Check for "AI - " instructions at the start of the email body (before forwarded content)
+  const aiInstructionMatch = textBody.match(/^\s*AI\s*[-–—:]\s*(.+?)(?:\n\n|\n-{3,}|\n_{3,}|$)/is);
+  const aiInstruction = aiInstructionMatch ? aiInstructionMatch[1].trim() : null;
+
   // Get project list from DB
   const { data: projects } = await getSupabase()
     .from("projects")
@@ -96,13 +104,18 @@ Scott often forwards emails with his own instructions at the top, like:
 - "Add a todo to follow up with this person"
 - "Todos to add: 1. ... 2. ..."
 
+EXPLICIT SIGNALS FROM SCOTT:
+${hasTodoSignal ? `- The subject contains "todo" — Scott DEFINITELY wants todos created from this email. Extract actionable tasks and create them as todos.` : "- No explicit todo signal in subject."}
+${aiInstruction ? `- Scott included a direct AI instruction: "${aiInstruction}"\n  FOLLOW THIS INSTRUCTION EXACTLY. It takes highest priority over all other rules.` : "- No direct AI instruction found."}
+
 CRITICAL RULES:
 1. If Scott writes instructions in the email (before a forwarded message), FOLLOW THEM. His instructions override everything else.
-2. Read the FULL email content (including any forwarded message) to understand context.
-3. Todos should be specific, actionable tasks — not just "follow up" but "Follow up with [person] about [topic]".
-4. Notes should be ONE brief sentence summarizing key info, in your own words.
-5. If Scott says "add a todo" but doesn't specify what, derive the action from the email content.
-6. Items can span MULTIPLE projects. Each item gets its own project assignment.
+2. If Scott starts an email with "AI - [instruction]", follow that instruction precisely. For example, "AI - extract key dates and create a note under Hearthfire" means do exactly that.
+3. Read the FULL email content (including any forwarded message) to understand context.
+4. Todos should be specific, actionable tasks — not just "follow up" but "Follow up with [person] about [topic]".
+5. Notes should be ONE brief sentence summarizing key info, in your own words.
+6. If Scott says "add a todo" but doesn't specify what, derive the action from the email content.
+7. Items can span MULTIPLE projects. Each item gets its own project assignment.
 
 SKIP RULES — return skip:true when:
 - The email is automated/marketing (newsletters, promotional offers, system notifications)
