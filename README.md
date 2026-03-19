@@ -24,6 +24,12 @@ A personal project management dashboard that turns your emails into organized to
 - **Password Protected** - Simple password auth for your dashboard
 - **Row Level Security** - Database-level security on all tables
 
+## Prerequisites
+
+- **A custom domain** (e.g., yourname.com) - Required for Postmark email ingestion. You can't use a plain Gmail address as the admin email. Domains cost ~$10/year from Squarespace, Namecheap, etc.
+- **Node.js** installed on your computer ([nodejs.org](https://nodejs.org))
+- **Claude Code CLI** installed ([docs.anthropic.com](https://docs.anthropic.com/en/docs/claude-code))
+
 ## Tech Stack (all free tiers)
 
 | Service | Purpose |

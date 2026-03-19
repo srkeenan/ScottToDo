@@ -4,9 +4,10 @@
 A personal project dashboard where you can forward emails and AI automatically sorts them into todos, decisions, and notes across your projects. Includes dark mode, drag-and-drop reordering, due dates, recurring todos, priority flags, search, mobile layout, and a weekly history view.
 
 ## What You Need (all free tiers work)
-1. A GitHub account
-2. Node.js installed on your computer (https://nodejs.org)
-3. Claude Code CLI installed (https://docs.anthropic.com/en/docs/claude-code)
+1. **A custom domain** (e.g., yourname.com) - Required for Postmark email ingestion. You can't use a plain Gmail address as the admin email. If you don't have one, grab one from Squarespace, Namecheap, etc. for about $10/year.
+2. A GitHub account
+3. Node.js installed on your computer (https://nodejs.org)
+4. Claude Code CLI installed (https://docs.anthropic.com/en/docs/claude-code)
 
 ## Step 1: Sign Up for Services (15 mins)
 

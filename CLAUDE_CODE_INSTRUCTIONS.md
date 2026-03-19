@@ -9,6 +9,8 @@ Copy and paste the section below into Claude Code after cloning the repo and run
 ```
 I just cloned a project management dashboard app. I need your help getting it set up for my own use. Walk me through each step one at a time.
 
+IMPORTANT NOTE: The email ingestion feature requires a custom domain (e.g., yourname.com). You can't use a plain Gmail address as the admin email. If I don't have a domain yet, help me understand what I need before proceeding with the Postmark setup.
+
 STEP 1 - ASK ME THESE QUESTIONS FIRST (before doing anything else):
 - What do you want to name your dashboard? (this replaces "ScottToDo" in the header)
 - How many project/workstream panels do you want, and what should they be called? (e.g., "Work", "Side Project", "Personal")
