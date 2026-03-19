@@ -45,7 +45,7 @@ A personal project management dashboard that turns your emails into organized to
 
 ### 1. Sign up for services
 
-Create free accounts on Supabase, Vercel, Postmark, and Anthropic. Grab your API keys from each.
+Create accounts on Supabase (free), Vercel (free), Postmark (free), and Anthropic (pay-per-use). Grab your API keys from each.
 
 ### 2. Clone and install
 

@@ -33,7 +33,7 @@ A personal project dashboard where you can forward emails and AI automatically s
 ### Anthropic (AI)
 1. Go to https://console.anthropic.com and sign up
 2. Go to API Keys and create a new key
-3. Copy the key (starts with "sk-ant-...")
+3. Copy the key — save it somewhere safe, you'll need it for your `.env.local` file
 
 ## Step 2: Set Up the Project (5 mins)
 
