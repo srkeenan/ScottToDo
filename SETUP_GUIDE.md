@@ -3,11 +3,12 @@
 ## What You'll Build
 A personal project dashboard where you can forward emails and AI automatically sorts them into todos, decisions, and notes across your projects. Includes dark mode, drag-and-drop reordering, due dates, recurring todos, priority flags, search, mobile layout, and a weekly history view.
 
-## What You Need (all free tiers work)
-1. **A custom domain** (e.g., yourname.com) - Required for Postmark email ingestion. You can't use a plain Gmail address as the admin email. If you don't have one, grab one from Squarespace, Namecheap, etc. for about $10/year.
-2. A GitHub account
-3. Node.js installed on your computer (https://nodejs.org)
-4. Claude Code CLI installed (https://docs.anthropic.com/en/docs/claude-code)
+## What You Need
+1. **A custom domain** (e.g., yourname.com) — Required for Postmark email ingestion. You can't use a plain Gmail address as the admin email. If you don't have one, grab one from Squarespace, Namecheap, etc. for about $10/year.
+2. **A Claude Pro or Max subscription** ($20/mo+) — Required for Claude Code CLI, which you'll use to set up and customize the app. The free version of Claude does not include Claude Code. (https://claude.ai/pricing)
+3. **An Anthropic API key** — Used at runtime for AI email classification. Pay-per-use, roughly $0.01 per email. New accounts get some free credits. (https://console.anthropic.com)
+4. A GitHub account
+5. Node.js installed on your computer (https://nodejs.org)
 
 ## Step 1: Sign Up for Services (15 mins)
 

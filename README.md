@@ -30,14 +30,16 @@ A personal project management dashboard that turns your emails into organized to
 - **Node.js** installed on your computer ([nodejs.org](https://nodejs.org))
 - **Claude Code CLI** installed ([docs.anthropic.com](https://docs.anthropic.com/en/docs/claude-code))
 
-## Tech Stack (all free tiers)
+## Tech Stack
 
-| Service | Purpose |
-|---------|---------|
-| [Supabase](https://supabase.com) | PostgreSQL database |
-| [Vercel](https://vercel.com) | Hosting & deployment |
-| [Postmark](https://postmarkapp.com) | Inbound email processing |
-| [Anthropic](https://anthropic.com) | Claude AI for email classification |
+| Service | Purpose | Cost |
+|---------|---------|------|
+| [Supabase](https://supabase.com) | PostgreSQL database | Free tier |
+| [Vercel](https://vercel.com) | Hosting & deployment | Free tier |
+| [Postmark](https://postmarkapp.com) | Inbound email processing | Free tier |
+| [Anthropic](https://anthropic.com) | Claude AI for email classification | API credits (pay-per-use, ~$0.01/email) |
+
+**Claude Code** (used for setup/customization) requires a [Claude Pro or Max subscription](https://claude.ai/pricing) ($20/mo+) or an Anthropic API key with credits. The free version of Claude does not include Claude Code.
 
 ## Quick Start (20 minutes)
 
