@@ -429,7 +429,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     <div className="min-h-screen p-4 relative" style={{ backgroundColor: bgColor }}>
       {/* Demo banner */}
       {isDemo && (
-        <div className="mb-3 px-4 py-2.5 rounded-lg bg-amber-500/90 text-white text-sm text-center font-medium">
+        <div className="mb-2 px-4 py-1.5 text-white/50 text-xs text-center">
           This is a demo of ScottToDo. Feel free to play around! The email ingestion feature is not available in demo mode.
         </div>
       )}
