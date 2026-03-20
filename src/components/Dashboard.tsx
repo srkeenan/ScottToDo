@@ -83,7 +83,7 @@ function isThisWeek(dateStr: string | null): boolean {
   return date >= weekStart && date < weekEnd;
 }
 
-export default function Dashboard() {
+export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -427,6 +427,12 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen p-4 relative" style={{ backgroundColor: bgColor }}>
+      {/* Demo banner */}
+      {isDemo && (
+        <div className="mb-3 px-4 py-2.5 rounded-lg bg-amber-500/90 text-white text-sm text-center font-medium">
+          This is a demo of ScottToDo. Feel free to play around! The email ingestion feature is not available in demo mode.
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <h1 className="text-2xl font-bold text-white">ScottToDo</h1>

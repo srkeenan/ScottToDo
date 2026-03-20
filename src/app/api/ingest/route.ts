@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
 
+// Block ingestion in demo mode
+const IS_DEMO = process.env.DEMO_MODE === "true";
+
 // Strip Gmail forwarding junk: headers, repeated addresses, confirmation text, etc.
 function cleanForwardedEmail(text: string): string {
   // Remove Gmail forwarding confirmation boilerplate
@@ -38,6 +41,13 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "admin@bermanroad.com").trim().t
 
 // Postmark inbound webhook — no dashboard auth, uses INGEST_TOKEN instead
 export async function POST(request: NextRequest) {
+  if (IS_DEMO) {
+    return NextResponse.json(
+      { error: "Email ingestion is not available in demo mode" },
+      { status: 403 }
+    );
+  }
+
   // Verify ingest token (passed as query param or header)
   const token = process.env.INGEST_TOKEN?.trim();
   if (token) {
