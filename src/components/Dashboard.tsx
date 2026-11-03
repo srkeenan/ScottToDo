@@ -96,6 +96,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [view, setView] = useState<"dashboard" | "history" | "calendar">("dashboard");
   const [mobileTab, setMobileTab] = useState<string | null>(null);
+  const [fitWidth, setFitWidth] = useState(true);
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
@@ -140,6 +141,18 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     const saved = localStorage.getItem("darkMode");
     if (saved === "true") setDarkMode(true);
   }, []);
+
+  // Load panel width preference
+  useEffect(() => {
+    if (localStorage.getItem("fitWidth") === "false") setFitWidth(false);
+  }, []);
+
+  function toggleFitWidth() {
+    setFitWidth((prev) => {
+      localStorage.setItem("fitWidth", String(!prev));
+      return !prev;
+    });
+  }
 
   function toggleDarkMode() {
     setDarkMode((prev) => {
@@ -528,6 +541,13 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           {view === "dashboard" ? (
             <>
               <button
+                onClick={toggleFitWidth}
+                className={`hidden md:block text-sm px-3 py-1.5 rounded-lg transition-colors ${fitWidth ? "bg-white/20 text-white" : "text-white/60 hover:text-white/90 hover:bg-white/10"}`}
+                title={fitWidth ? "Panels fit the screen. Click for fixed-width panels with horizontal scroll" : "Panels have a fixed width and scroll sideways. Click to fit them to the screen"}
+              >
+                Fit width
+              </button>
+              <button
                 onClick={() => setView("calendar")}
                 className="text-sm px-3 py-1.5 rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
               >
@@ -633,7 +653,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           />
         </div>
       ) : (
-        <div className="flex gap-2 flex-1 min-h-0 max-md:flex-col max-md:overflow-y-auto">
+        <div className={`flex gap-2 flex-1 min-h-0 max-md:flex-col max-md:overflow-y-auto ${fitWidth ? "" : "md:overflow-x-auto"}`}>
           {projects.map((project) => {
             const isCollapsed = collapsed.has(project.id);
 
@@ -668,10 +688,8 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                 key={project.id}
                 onDragOver={(e) => { if (dragId) { e.preventDefault(); setDragOverId(project.id); } }}
                 onDrop={(e) => { e.preventDefault(); if (dragId) reorderProjects(dragId, project.id); setDragId(null); setDragOverId(null); }}
-                className={`flex-1 min-w-0 min-h-0 rounded-lg ${isMobileHidden ? "hidden md:block" : ""} ${dragOverId === project.id && dragId !== project.id ? "ring-2 ring-white/60" : ""} ${dragId === project.id ? "opacity-50" : ""}`}
-                style={{
-                  flexBasis: `${100 / expandedProjects.length}%`,
-                }}
+                className={`${fitWidth ? "flex-1" : "flex-1 md:flex-none md:basis-[calc((100%-1rem)/3)]"} min-w-0 min-h-0 rounded-lg ${isMobileHidden ? "hidden md:block" : ""} ${dragOverId === project.id && dragId !== project.id ? "ring-2 ring-white/60" : ""} ${dragId === project.id ? "opacity-50" : ""}`}
+                style={fitWidth ? { flexBasis: `${100 / expandedProjects.length}%` } : undefined}
               >
                 <ProjectLane
                   project={project}
