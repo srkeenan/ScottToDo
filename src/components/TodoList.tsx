@@ -10,6 +10,7 @@ interface Props {
   onUpdate: (id: string, updates: Partial<Todo>) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  onMove: (id: string, backlog: boolean, orderedIds: string[]) => void;
   darkMode?: boolean;
   isThisWeek?: (dateStr: string | null) => boolean;
 }
@@ -21,8 +22,9 @@ const RECURRING_OPTIONS = [
   { value: "monthly", label: "Monthly" },
 ];
 
-export default function TodoList({ todos, onAdd, onUpdate, onDelete, onReorder, darkMode, isThisWeek }: Props) {
+export default function TodoList({ todos, onAdd, onUpdate, onDelete, onReorder, onMove, darkMode, isThisWeek }: Props) {
   const [newText, setNewText] = useState("");
+  const [backlogOpen, setBacklogOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -46,12 +48,27 @@ export default function TodoList({ todos, onAdd, onUpdate, onDelete, onReorder, 
   }
 
   function handleDragEnd(result: DropResult) {
-    if (!result.destination) return;
-    if (result.source.index === result.destination.index) return;
-    const reordered = Array.from(activeTodos);
-    const [moved] = reordered.splice(result.source.index, 1);
-    reordered.splice(result.destination.index, 0, moved);
-    onReorder(reordered.map((t) => t.id));
+    const { source, destination } = result;
+    if (!destination) return;
+    const sameList = source.droppableId === destination.droppableId;
+    if (sameList && source.index === destination.index) return;
+
+    const lists: Record<string, Todo[]> = { todos: mainTodos, backlog: backlogTodos };
+    const sourceList = Array.from(lists[source.droppableId]);
+    const [moved] = sourceList.splice(source.index, 1);
+
+    if (sameList) {
+      sourceList.splice(destination.index, 0, moved);
+      onReorder(sourceList.map((t) => t.id));
+      return;
+    }
+
+    const destList = Array.from(lists[destination.droppableId]);
+    // A collapsed backlog shows no rows, so a drop there goes to the end
+    const toBacklog = destination.droppableId === "backlog";
+    const index = toBacklog && !backlogOpen ? destList.length : destination.index;
+    destList.splice(index, 0, moved);
+    onMove(moved.id, toBacklog, destList.map((t) => t.id));
   }
 
   function isOverdue(todo: Todo): boolean {
@@ -69,40 +86,14 @@ export default function TodoList({ todos, onAdd, onUpdate, onDelete, onReorder, 
   }
 
   const activeTodos = todos.filter((t) => !t.completed);
+  const mainTodos = activeTodos.filter((t) => !t.backlog);
+  const backlogTodos = activeTodos.filter((t) => t.backlog);
   const completedThisWeek = todos.filter((t) => t.completed && isThisWeek?.(t.completed_at));
 
   const inputBg = darkMode ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400" : "border-gray-200";
   const labelColor = darkMode ? "text-gray-400" : "text-gray-400";
 
-  return (
-    <div>
-      <h3 className={`text-xs font-semibold uppercase ${labelColor} mb-2`}>
-        Todos ({activeTodos.length})
-      </h3>
-
-      {/* Add new */}
-      <div className="flex gap-1 mb-2">
-        <input
-          value={newText}
-          onChange={(e) => setNewText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          placeholder="Add todo..."
-          className={`flex-1 text-sm px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 ${inputBg}`}
-        />
-        <button
-          onClick={handleAdd}
-          className={`text-sm px-2 py-1 rounded ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}`}
-        >
-          +
-        </button>
-      </div>
-
-      {/* Active todos */}
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="todos">
-          {(provided) => (
-            <ul className="space-y-1" ref={provided.innerRef} {...provided.droppableProps}>
-              {activeTodos.map((todo, index) => (
+  const renderTodo = (todo: Todo, index: number) => (
                 <Draggable key={todo.id} draggableId={todo.id} index={index}>
                   {(provided, snapshot) => (
                     <li
@@ -207,9 +198,68 @@ export default function TodoList({ todos, onAdd, onUpdate, onDelete, onReorder, 
                     </li>
                   )}
                 </Draggable>
-              ))}
+  );
+
+  return (
+    <div>
+      <h3 className={`text-xs font-semibold uppercase ${labelColor} mb-2`}>
+        Todos ({mainTodos.length})
+      </h3>
+
+      {/* Add new */}
+      <div className="flex gap-1 mb-2">
+        <input
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder="Add todo..."
+          className={`flex-1 text-sm px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 ${inputBg}`}
+        />
+        <button
+          onClick={handleAdd}
+          className={`text-sm px-2 py-1 rounded ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}`}
+        >
+          +
+        </button>
+      </div>
+
+      {/* Active todos */}
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="todos">
+          {(provided) => (
+            <ul className="space-y-1" ref={provided.innerRef} {...provided.droppableProps}>
+              {mainTodos.map((todo, index) => renderTodo(todo, index))}
               {provided.placeholder}
             </ul>
+          )}
+        </Droppable>
+
+        {/* Backlog */}
+        <Droppable droppableId="backlog">
+          {(provided, snapshot) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className={`mt-3 rounded ${snapshot.isDraggingOver ? (darkMode ? "bg-gray-700/50" : "bg-blue-50") : ""}`}
+            >
+              <button
+                onClick={() => setBacklogOpen((o) => !o)}
+                className={`flex items-center gap-1 text-xs font-semibold uppercase ${labelColor} mb-2`}
+                title={backlogOpen ? "Collapse backlog" : "Expand backlog"}
+              >
+                <span className="w-3">{backlogOpen ? "▾" : "▸"}</span>
+                Backlog ({backlogTodos.length})
+              </button>
+              {backlogOpen && (
+                <ul className="space-y-1 min-h-[1.5rem]">
+                  {backlogTodos.map((todo, index) => renderTodo(todo, index))}
+                  {backlogTodos.length === 0 && (
+                    <li className={`text-xs ${darkMode ? "text-gray-600" : "text-gray-300"}`}>Drag todos here</li>
+                  )}
+                </ul>
+              )}
+              <div className={backlogOpen ? "" : "hidden"}>{provided.placeholder}</div>
+            </div>
           )}
         </Droppable>
       </DragDropContext>

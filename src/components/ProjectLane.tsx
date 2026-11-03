@@ -40,6 +40,7 @@ interface Props {
   onUpdateTodo: (id: string, updates: Partial<Todo>) => void;
   onDeleteTodo: (id: string) => void;
   onReorderTodos: (orderedIds: string[]) => void;
+  onMoveTodo: (id: string, backlog: boolean, orderedIds: string[]) => void;
   onAddDecision: (text: string) => void;
   onUpdateDecision: (id: string, updates: Partial<Decision>) => void;
   onDeleteDecision: (id: string) => void;
@@ -71,6 +72,7 @@ export default function ProjectLane({
   onUpdateTodo,
   onDeleteTodo,
   onReorderTodos,
+  onMoveTodo,
   onAddDecision,
   onUpdateDecision,
   onDeleteDecision,
@@ -169,6 +171,7 @@ export default function ProjectLane({
           onUpdate={onUpdateTodo}
           onDelete={onDeleteTodo}
           onReorder={onReorderTodos}
+          onMove={onMoveTodo}
           darkMode={darkMode}
           isThisWeek={isThisWeek}
         />

@@ -32,6 +32,7 @@ export interface Todo {
   due_date: string | null;
   priority: boolean;
   recurring: string | null;
+  backlog?: boolean;
   created_at: string;
 }
 
@@ -298,6 +299,36 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       const updated = await res.json();
       setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
     }
+  }
+
+  // Move a todo between the main list and the backlog, saving the destination order
+  async function moveTodo(id: string, backlog: boolean, orderedIds: string[]) {
+    setTodos((prev) =>
+      prev.map((t) => {
+        if (t.id === id) return { ...t, backlog, sort_order: orderedIds.indexOf(id) };
+        const i = orderedIds.indexOf(t.id);
+        return i >= 0 ? { ...t, sort_order: i } : t;
+      })
+    );
+
+    const res = await fetch("/api/todos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, backlog }),
+    });
+    if (!res.ok) {
+      // Most likely the backlog column hasn't been added yet; resync from the server
+      fetchAll();
+      return;
+    }
+    await fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "todos",
+        items: orderedIds.map((oid, index) => ({ id: oid, sort_order: index })),
+      }),
+    });
   }
 
   function getNextRecurringDate(currentDue: string | null, recurring: string): string {
@@ -656,6 +687,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                   onUpdateTodo={updateTodo}
                   onDeleteTodo={deleteTodo}
                   onReorderTodos={(ids) => reorderItems("todos", ids)}
+                  onMoveTodo={moveTodo}
                   onAddDecision={(text) => addDecision(project.id, text)}
                   onUpdateDecision={updateDecision}
                   onDeleteDecision={deleteDecision}
