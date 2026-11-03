@@ -1,7 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import ProjectLane from "./ProjectLane";
+import CalendarView from "./CalendarView";
+import HistoryView from "./HistoryView";
+
+// Color palette for workstream headers
+const LANE_COLORS = [
+  { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-900", accent: "#3b82f6", darkBg: "bg-blue-950", darkBorder: "border-blue-800", darkText: "text-blue-100" },
+  { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-900", accent: "#f59e0b", darkBg: "bg-amber-950", darkBorder: "border-amber-800", darkText: "text-amber-100" },
+  { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-900", accent: "#10b981", darkBg: "bg-emerald-950", darkBorder: "border-emerald-800", darkText: "text-emerald-100" },
+  { bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-900", accent: "#8b5cf6", darkBg: "bg-purple-950", darkBorder: "border-purple-800", darkText: "text-purple-100" },
+  { bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-900", accent: "#f43f5e", darkBg: "bg-rose-950", darkBorder: "border-rose-800", darkText: "text-rose-100" },
+  { bg: "bg-cyan-50", border: "border-cyan-200", text: "text-cyan-900", accent: "#06b6d4", darkBg: "bg-cyan-950", darkBorder: "border-cyan-800", darkText: "text-cyan-100" },
+];
 
 export interface Project {
   id: string;
@@ -15,7 +27,12 @@ export interface Todo {
   project_id: string;
   text: string;
   completed: boolean;
+  completed_at: string | null;
   sort_order: number;
+  due_date: string | null;
+  priority: boolean;
+  recurring: string | null;
+  backlog?: boolean;
   created_at: string;
 }
 
@@ -25,6 +42,7 @@ export interface Decision {
   text: string;
   archived: boolean;
   decided_at: string | null;
+  sort_order: number;
   created_at: string;
 }
 
@@ -35,6 +53,8 @@ export interface Contact {
   role: string | null;
   email: string | null;
   phone: string | null;
+  meeting_date: string | null;
+  sort_order: number;
   created_at: string;
 }
 
@@ -42,10 +62,29 @@ export interface Note {
   id: string;
   project_id: string;
   text: string;
+  sort_order: number;
   created_at: string;
 }
 
-export default function Dashboard() {
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function isThisWeek(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  const date = new Date(dateStr);
+  const now = new Date();
+  const weekStart = getWeekStart(now);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  return date >= weekStart && date < weekEnd;
+}
+
+export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -53,6 +92,22 @@ export default function Dashboard() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [view, setView] = useState<"dashboard" | "history" | "calendar">("dashboard");
+  const [mobileTab, setMobileTab] = useState<string | null>(null);
+  const [fitWidth, setFitWidth] = useState(true);
+  const [addingProject, setAddingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  function submitNewProject() {
+    const name = newProjectName.trim();
+    setAddingProject(false);
+    setNewProjectName("");
+    if (name) addProject(name);
+  }
 
   const fetchAll = useCallback(async () => {
     try {
@@ -68,6 +123,8 @@ export default function Dashboard() {
       setDecisions(d);
       setContacts(c);
       setNotes(n);
+      // Set mobile tab to first project
+      if (p.length > 0 && !mobileTab) setMobileTab(p[0].id);
     } catch (err) {
       console.error("Failed to fetch data:", err);
     } finally {
@@ -79,6 +136,31 @@ export default function Dashboard() {
     fetchAll();
   }, [fetchAll]);
 
+  // Load dark mode preference
+  useEffect(() => {
+    const saved = localStorage.getItem("darkMode");
+    if (saved === "true") setDarkMode(true);
+  }, []);
+
+  // Load panel width preference
+  useEffect(() => {
+    if (localStorage.getItem("fitWidth") === "false") setFitWidth(false);
+  }, []);
+
+  function toggleFitWidth() {
+    setFitWidth((prev) => {
+      localStorage.setItem("fitWidth", String(!prev));
+      return !prev;
+    });
+  }
+
+  function toggleDarkMode() {
+    setDarkMode((prev) => {
+      localStorage.setItem("darkMode", String(!prev));
+      return !prev;
+    });
+  }
+
   function toggleCollapse(projectId: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -87,6 +169,60 @@ export default function Dashboard() {
       return next;
     });
   }
+
+  // Filter items by search query
+  const filteredTodos = useMemo(() => {
+    if (!searchQuery) return todos;
+    const q = searchQuery.toLowerCase();
+    return todos.filter((t) => t.text.toLowerCase().includes(q));
+  }, [todos, searchQuery]);
+
+  const filteredDecisions = useMemo(() => {
+    if (!searchQuery) return decisions;
+    const q = searchQuery.toLowerCase();
+    return decisions.filter((d) => d.text.toLowerCase().includes(q));
+  }, [decisions, searchQuery]);
+
+  const filteredContacts = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const active = contacts.filter((c) => !c.meeting_date || c.meeting_date >= today);
+    if (!searchQuery) return active;
+    const q = searchQuery.toLowerCase();
+    return active.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      (c.role && c.role.toLowerCase().includes(q)) ||
+      (c.email && c.email.toLowerCase().includes(q))
+    );
+  }, [contacts, searchQuery]);
+
+  const filteredNotes = useMemo(() => {
+    if (!searchQuery) return notes;
+    const q = searchQuery.toLowerCase();
+    return notes.filter((n) => n.text.toLowerCase().includes(q));
+  }, [notes, searchQuery]);
+
+  // History data: ALL completed todos + archived decisions (grouped by week in HistoryView)
+  const historyTodos = useMemo(() =>
+    todos.filter((t) => t.completed),
+    [todos]
+  );
+
+  const historyDecisions = useMemo(() =>
+    decisions.filter((d) => d.archived),
+    [decisions]
+  );
+
+  // Calendar data: all todos (with and without due dates)
+  const calendarTodos = useMemo(() => todos.filter((t) => !t.completed), [todos]);
+
+  // Project color map
+  const projectColorMap = useMemo(() => {
+    const map: Record<string, typeof LANE_COLORS[0]> = {};
+    projects.forEach((p, i) => {
+      map[p.id] = LANE_COLORS[i % LANE_COLORS.length];
+    });
+    return map;
+  }, [projects]);
 
   async function updateProject(id: string, updates: Partial<Project>) {
     const res = await fetch("/api/projects", {
@@ -98,6 +234,38 @@ export default function Dashboard() {
       const updated = await res.json();
       setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
     }
+  }
+
+  async function addProject(name: string) {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      const created = await res.json();
+      setProjects((prev) => [...prev, created]);
+    }
+  }
+
+  async function reorderProjects(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
+    const from = projects.findIndex((p) => p.id === draggedId);
+    const to = projects.findIndex((p) => p.id === targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...projects];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setProjects(next.map((p, i) => ({ ...p, sort_order: i })));
+
+    await fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "projects",
+        items: next.map((p, i) => ({ id: p.id, sort_order: i })),
+      }),
+    });
   }
 
   async function addTodo(projectId: string, text: string) {
@@ -113,6 +281,28 @@ export default function Dashboard() {
   }
 
   async function updateTodo(id: string, updates: Partial<Todo>) {
+    // Handle recurring: when completing a recurring todo, create next occurrence
+    const todo = todos.find((t) => t.id === id);
+    if (todo && updates.completed && todo.recurring && !todo.completed) {
+      const nextDate = getNextRecurringDate(todo.due_date, todo.recurring);
+      // Create new todo for next occurrence
+      const res = await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: todo.project_id,
+          text: todo.text,
+          due_date: nextDate,
+          recurring: todo.recurring,
+          priority: todo.priority,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setTodos((prev) => [created, ...prev]);
+      }
+    }
+
     const res = await fetch("/api/todos", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -122,6 +312,52 @@ export default function Dashboard() {
       const updated = await res.json();
       setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
     }
+  }
+
+  // Move a todo between the main list and the backlog, saving the destination order
+  async function moveTodo(id: string, backlog: boolean, orderedIds: string[]) {
+    setTodos((prev) =>
+      prev.map((t) => {
+        if (t.id === id) return { ...t, backlog, sort_order: orderedIds.indexOf(id) };
+        const i = orderedIds.indexOf(t.id);
+        return i >= 0 ? { ...t, sort_order: i } : t;
+      })
+    );
+
+    const res = await fetch("/api/todos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, backlog }),
+    });
+    if (!res.ok) {
+      // Most likely the backlog column hasn't been added yet; resync from the server
+      fetchAll();
+      return;
+    }
+    await fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "todos",
+        items: orderedIds.map((oid, index) => ({ id: oid, sort_order: index })),
+      }),
+    });
+  }
+
+  function getNextRecurringDate(currentDue: string | null, recurring: string): string {
+    const base = currentDue ? new Date(currentDue) : new Date();
+    switch (recurring) {
+      case "daily":
+        base.setDate(base.getDate() + 1);
+        break;
+      case "weekly":
+        base.setDate(base.getDate() + 7);
+        break;
+      case "monthly":
+        base.setMonth(base.getMonth() + 1);
+        break;
+    }
+    return base.toISOString().split("T")[0];
   }
 
   async function deleteTodo(id: string) {
@@ -229,6 +465,27 @@ export default function Dashboard() {
     }
   }
 
+  async function reorderItems(
+    table: "todos" | "decisions" | "contacts" | "notes",
+    orderedIds: string[]
+  ) {
+    const items = orderedIds.map((id, index) => ({ id, sort_order: index }));
+
+    const setterMap = { todos: setTodos, decisions: setDecisions, contacts: setContacts, notes: setNotes };
+    setterMap[table]((prev: any[]) =>
+      prev.map((item) => {
+        const match = items.find((i) => i.id === item.id);
+        return match ? { ...item, sort_order: match.sort_order } : item;
+      })
+    );
+
+    await fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ table, items }),
+    });
+  }
+
   async function deleteNote(id: string) {
     const res = await fetch("/api/notes", {
       method: "DELETE",
@@ -240,78 +497,236 @@ export default function Dashboard() {
     }
   }
 
+  const bgColor = darkMode ? "#1a1a2e" : "#336600";
+  const cardBg = darkMode ? "bg-gray-800" : "bg-white";
+  const cardBorder = darkMode ? "border-gray-700" : "border-gray-200";
+  const textColor = darkMode ? "text-gray-100" : "text-gray-900";
+  const subTextColor = darkMode ? "text-gray-400" : "text-gray-600";
+  const inputBg = darkMode ? "bg-gray-700 border-gray-600 text-gray-100" : "border-gray-200";
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-400">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bgColor }}>
+        <p className="text-green-300">Loading...</p>
       </div>
     );
   }
 
   const expandedProjects = projects.filter((p) => !collapsed.has(p.id));
-  const collapsedProjects = projects.filter((p) => collapsed.has(p.id));
 
   return (
-    <div className="min-h-screen p-4">
-      <h1 className="text-2xl font-bold mb-4">ScottToDo</h1>
-      <div className="flex gap-2 min-h-[calc(100vh-5rem)]">
-        {projects.map((project) => {
-          const isCollapsed = collapsed.has(project.id);
+    <div className="h-screen flex flex-col overflow-hidden p-4" style={{ backgroundColor: bgColor }}>
+      {/* Demo banner */}
+      {isDemo && (
+        <div className="mb-2 px-4 py-1.5 text-white/50 text-xs text-center">
+          This is a demo of ScottToDo. Feel free to play around! The email ingestion feature is not available in demo mode.
+        </div>
+      )}
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap shrink-0">
+        <h1 className="text-2xl font-bold text-white">ScottToDo</h1>
 
-          if (isCollapsed) {
-            return (
+        {/* Search */}
+        <div className="flex-1 max-w-xs">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            className={`w-full text-sm px-3 py-1.5 rounded-lg ${inputBg} focus:outline-none focus:ring-1 focus:ring-green-400`}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          {/* View toggles */}
+          {view === "dashboard" ? (
+            <>
               <button
-                key={project.id}
-                onClick={() => toggleCollapse(project.id)}
-                className="w-10 bg-gray-200 hover:bg-gray-300 rounded-lg flex items-center justify-center cursor-pointer transition-colors shrink-0"
-                title={`Expand ${project.name}`}
+                onClick={toggleFitWidth}
+                className={`hidden md:block text-sm px-3 py-1.5 rounded-lg transition-colors ${fitWidth ? "bg-white/20 text-white" : "text-white/60 hover:text-white/90 hover:bg-white/10"}`}
+                title={fitWidth ? "Panels fit the screen. Click for fixed-width panels with horizontal scroll" : "Panels have a fixed width and scroll sideways. Click to fit them to the screen"}
               >
-                <span
-                  className="text-sm font-medium text-gray-600 whitespace-nowrap"
-                  style={{
-                    writingMode: "vertical-rl",
-                    transform: "rotate(180deg)",
-                  }}
-                >
-                  {project.name}
-                </span>
+                Fit width
               </button>
-            );
-          }
-
-          return (
-            <div
-              key={project.id}
-              className="flex-1 min-w-0"
-              style={{
-                flexBasis: `${100 / expandedProjects.length}%`,
-              }}
+              <button
+                onClick={() => setView("calendar")}
+                className="text-sm px-3 py-1.5 rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+              >
+                Calendar
+              </button>
+              <button
+                onClick={() => setView("history")}
+                className="text-sm px-3 py-1.5 rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+              >
+                History
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setView("dashboard")}
+              className="text-sm px-3 py-1.5 rounded-lg bg-white/20 text-white transition-colors"
             >
-              <ProjectLane
-                project={project}
-                todos={todos.filter((t) => t.project_id === project.id)}
-                decisions={decisions.filter((d) => d.project_id === project.id)}
-                contacts={contacts.filter((c) => c.project_id === project.id)}
-                notes={notes.filter((n) => n.project_id === project.id)}
-                onCollapse={() => toggleCollapse(project.id)}
-                onUpdateProject={(updates) => updateProject(project.id, updates)}
-                onAddTodo={(text) => addTodo(project.id, text)}
-                onUpdateTodo={updateTodo}
-                onDeleteTodo={deleteTodo}
-                onAddDecision={(text) => addDecision(project.id, text)}
-                onUpdateDecision={updateDecision}
-                onDeleteDecision={deleteDecision}
-                onAddContact={(name) => addContact(project.id, name)}
-                onUpdateContact={updateContact}
-                onDeleteContact={deleteContact}
-                onAddNote={(text) => addNote(project.id, text)}
-                onUpdateNote={updateNote}
-                onDeleteNote={deleteNote}
-              />
-            </div>
-          );
-        })}
+              Dashboard
+            </button>
+          )}
+
+          {/* Add project */}
+          {addingProject ? (
+            <input
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onBlur={submitNewProject}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNewProject();
+                if (e.key === "Escape") {
+                  setNewProjectName("");
+                  setAddingProject(false);
+                }
+              }}
+              placeholder="Project name"
+              className={`text-sm px-3 py-1.5 rounded-lg w-36 ${inputBg} focus:outline-none focus:ring-1 focus:ring-green-400`}
+              autoFocus
+            />
+          ) : (
+            <button
+              onClick={() => setAddingProject(true)}
+              className="text-sm px-3 py-1.5 rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+            >
+              + Project
+            </button>
+          )}
+
+          {/* Dark mode toggle */}
+          <button
+            onClick={toggleDarkMode}
+            className="text-white/60 hover:text-white/90 text-lg transition-colors"
+            title={darkMode ? "Light mode" : "Dark mode"}
+          >
+            {darkMode ? "\u2600" : "\u263E"}
+          </button>
+
+          {/* Watermark */}
+          <span className="text-white/15 text-xs font-medium select-none pointer-events-none ml-2 hidden sm:inline">
+            vibe-designed by Scott Keenan
+          </span>
+        </div>
       </div>
+
+      {/* Mobile tab bar */}
+      <div className="flex gap-1 mb-3 overflow-x-auto md:hidden shrink-0">
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setMobileTab(p.id)}
+            className={`text-xs px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
+              mobileTab === p.id
+                ? "bg-white/20 text-white font-medium"
+                : "text-white/50 hover:text-white/80"
+            }`}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {view === "history" ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <HistoryView
+            todos={historyTodos}
+            decisions={historyDecisions}
+            projects={projects}
+            darkMode={darkMode}
+            projectColorMap={projectColorMap}
+            onRestoreTodo={(id) => updateTodo(id, { completed: false, completed_at: null })}
+            onRestoreDecision={(id) => updateDecision(id, { archived: false })}
+          />
+        </div>
+      ) : view === "calendar" ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <CalendarView
+            todos={calendarTodos}
+            meetings={contacts}
+            projects={projects}
+            darkMode={darkMode}
+            projectColorMap={projectColorMap}
+            onUpdateTodo={updateTodo}
+            onUpdateContact={updateContact}
+          />
+        </div>
+      ) : (
+        <div className={`flex gap-2 flex-1 min-h-0 max-md:flex-col max-md:overflow-y-auto ${fitWidth ? "" : "md:overflow-x-auto"}`}>
+          {projects.map((project) => {
+            const isCollapsed = collapsed.has(project.id);
+
+            // On mobile, only show the active tab
+            const isMobileHidden = mobileTab !== project.id;
+
+            if (isCollapsed) {
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => toggleCollapse(project.id)}
+                  onDragOver={(e) => { if (dragId) { e.preventDefault(); setDragOverId(project.id); } }}
+                  onDrop={(e) => { e.preventDefault(); if (dragId) reorderProjects(dragId, project.id); setDragId(null); setDragOverId(null); }}
+                  className={`w-10 ${cardBg} hover:opacity-80 rounded-lg items-center justify-center cursor-pointer transition-colors shrink-0 hidden md:flex ${dragOverId === project.id && dragId !== project.id ? "ring-2 ring-white/60" : ""}`}
+                  title={`Expand ${project.name}`}
+                >
+                  <span
+                    className={`text-sm font-medium ${subTextColor} whitespace-nowrap`}
+                    style={{
+                      writingMode: "vertical-rl",
+                      transform: "rotate(180deg)",
+                    }}
+                  >
+                    {project.name}
+                  </span>
+                </button>
+              );
+            }
+
+            return (
+              <div
+                key={project.id}
+                onDragOver={(e) => { if (dragId) { e.preventDefault(); setDragOverId(project.id); } }}
+                onDrop={(e) => { e.preventDefault(); if (dragId) reorderProjects(dragId, project.id); setDragId(null); setDragOverId(null); }}
+                className={`${fitWidth ? "flex-1" : "flex-1 md:flex-none md:basis-[calc((100%-1rem)/3)]"} min-w-0 min-h-0 rounded-lg ${isMobileHidden ? "hidden md:block" : ""} ${dragOverId === project.id && dragId !== project.id ? "ring-2 ring-white/60" : ""} ${dragId === project.id ? "opacity-50" : ""}`}
+                style={fitWidth ? { flexBasis: `${100 / expandedProjects.length}%` } : undefined}
+              >
+                <ProjectLane
+                  project={project}
+                  todos={filteredTodos.filter((t) => t.project_id === project.id).sort((a, b) => a.sort_order - b.sort_order)}
+                  decisions={filteredDecisions.filter((d) => d.project_id === project.id).sort((a, b) => a.sort_order - b.sort_order)}
+                  contacts={filteredContacts.filter((c) => c.project_id === project.id).sort((a, b) => a.sort_order - b.sort_order)}
+                  notes={filteredNotes.filter((n) => n.project_id === project.id).sort((a, b) => a.sort_order - b.sort_order)}
+                  onCollapse={() => toggleCollapse(project.id)}
+                  onProjectDragStart={() => setDragId(project.id)}
+                  onProjectDragEnd={() => { setDragId(null); setDragOverId(null); }}
+                  onUpdateProject={(updates) => updateProject(project.id, updates)}
+                  onAddTodo={(text) => addTodo(project.id, text)}
+                  onUpdateTodo={updateTodo}
+                  onDeleteTodo={deleteTodo}
+                  onReorderTodos={(ids) => reorderItems("todos", ids)}
+                  onMoveTodo={moveTodo}
+                  onAddDecision={(text) => addDecision(project.id, text)}
+                  onUpdateDecision={updateDecision}
+                  onDeleteDecision={deleteDecision}
+                  onReorderDecisions={(ids) => reorderItems("decisions", ids)}
+                  onAddContact={(name) => addContact(project.id, name)}
+                  onUpdateContact={updateContact}
+                  onDeleteContact={deleteContact}
+                  onReorderContacts={(ids) => reorderItems("contacts", ids)}
+                  onAddNote={(text) => addNote(project.id, text)}
+                  onUpdateNote={updateNote}
+                  onDeleteNote={deleteNote}
+                  onReorderNotes={(ids) => reorderItems("notes", ids)}
+                  darkMode={darkMode}
+                  isThisWeek={isThisWeek}
+                  laneColor={projectColorMap[project.id]}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

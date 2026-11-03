@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import type { Todo } from "./Dashboard";
 
 interface Props {
@@ -8,10 +9,22 @@ interface Props {
   onAdd: (text: string) => void;
   onUpdate: (id: string, updates: Partial<Todo>) => void;
   onDelete: (id: string) => void;
+  onReorder: (orderedIds: string[]) => void;
+  onMove: (id: string, backlog: boolean, orderedIds: string[]) => void;
+  darkMode?: boolean;
+  isThisWeek?: (dateStr: string | null) => boolean;
 }
 
-export default function TodoList({ todos, onAdd, onUpdate, onDelete }: Props) {
+const RECURRING_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+
+export default function TodoList({ todos, onAdd, onUpdate, onDelete, onReorder, onMove, darkMode, isThisWeek }: Props) {
   const [newText, setNewText] = useState("");
+  const [backlogOpen, setBacklogOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -34,13 +47,163 @@ export default function TodoList({ todos, onAdd, onUpdate, onDelete }: Props) {
     }
   }
 
+  function handleDragEnd(result: DropResult) {
+    const { source, destination } = result;
+    if (!destination) return;
+    const sameList = source.droppableId === destination.droppableId;
+    if (sameList && source.index === destination.index) return;
+
+    const lists: Record<string, Todo[]> = { todos: mainTodos, backlog: backlogTodos };
+    const sourceList = Array.from(lists[source.droppableId]);
+    const [moved] = sourceList.splice(source.index, 1);
+
+    if (sameList) {
+      sourceList.splice(destination.index, 0, moved);
+      onReorder(sourceList.map((t) => t.id));
+      return;
+    }
+
+    const destList = Array.from(lists[destination.droppableId]);
+    // A collapsed backlog shows no rows, so a drop there goes to the end
+    const toBacklog = destination.droppableId === "backlog";
+    const index = toBacklog && !backlogOpen ? destList.length : destination.index;
+    destList.splice(index, 0, moved);
+    onMove(moved.id, toBacklog, destList.map((t) => t.id));
+  }
+
+  function isOverdue(todo: Todo): boolean {
+    if (!todo.due_date || todo.completed) return false;
+    const today = new Date().toISOString().split("T")[0];
+    return todo.due_date < today;
+  }
+
+  function isDueSoon(todo: Todo): boolean {
+    if (!todo.due_date || todo.completed) return false;
+    const today = new Date();
+    const due = new Date(todo.due_date);
+    const diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= 2;
+  }
+
   const activeTodos = todos.filter((t) => !t.completed);
-  const completedTodos = todos.filter((t) => t.completed);
+  const mainTodos = activeTodos.filter((t) => !t.backlog);
+  const backlogTodos = activeTodos.filter((t) => t.backlog);
+  const completedThisWeek = todos.filter((t) => t.completed && isThisWeek?.(t.completed_at));
+
+  const inputBg = darkMode ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400" : "border-gray-200";
+  const labelColor = darkMode ? "text-gray-400" : "text-gray-400";
+
+  const renderTodo = (todo: Todo, index: number) => (
+                <Draggable key={todo.id} draggableId={todo.id} index={index}>
+                  {(provided, snapshot) => (
+                    <li
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      className={`flex items-start gap-2 group ${snapshot.isDragging ? "bg-blue-50 rounded shadow-sm" : ""} ${isOverdue(todo) ? "bg-red-50 rounded px-1 -mx-1" : ""} ${darkMode && isOverdue(todo) ? "!bg-red-900/30" : ""}`}
+                    >
+                      <span
+                        {...provided.dragHandleProps}
+                        className={`${darkMode ? "text-gray-600 hover:text-gray-400" : "text-gray-300 hover:text-gray-500"} cursor-grab mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-xs select-none`}
+                        title="Drag to reorder"
+                      >
+                        &#10303;
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        onChange={() => onUpdate(todo.id, { completed: true, completed_at: new Date().toISOString() })}
+                        className="mt-1 shrink-0"
+                      />
+                      {editingId === todo.id ? (
+                        <input
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => saveEdit(todo.id)}
+                          onKeyDown={(e) => e.key === "Enter" && saveEdit(todo.id)}
+                          className={`flex-1 text-sm border-b border-blue-500 outline-none bg-transparent ${darkMode ? "text-gray-100" : ""}`}
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="flex-1 min-w-0">
+                          <span
+                            className={`text-sm cursor-pointer hover:text-blue-600 ${todo.priority ? "font-bold" : ""} ${darkMode ? "text-gray-100" : ""} ${isOverdue(todo) ? "text-red-700" : ""} ${darkMode && isOverdue(todo) ? "!text-red-400" : ""}`}
+                            onClick={() => startEdit(todo)}
+                          >
+                            {todo.priority && <span className="text-amber-500 mr-1" title="High priority">!</span>}
+                            {todo.text}
+                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {todo.due_date && (
+                              <span className={`text-xs ${isOverdue(todo) ? "text-red-500 font-medium" : isDueSoon(todo) ? "text-amber-500" : darkMode ? "text-gray-500" : "text-gray-400"}`}>
+                                {isOverdue(todo) ? "Overdue: " : ""}
+                                {new Date(todo.due_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                            )}
+                            {todo.recurring && (
+                              <span className={`text-xs ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+                                &#x21BB; {todo.recurring}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {/* Priority toggle */}
+                      <button
+                        onClick={() => onUpdate(todo.id, { priority: !todo.priority })}
+                        className={`text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-all ${todo.priority ? "!opacity-100 text-amber-500" : darkMode ? "text-gray-600 hover:text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
+                        title="Toggle priority"
+                      >
+                        !
+                      </button>
+                      {/* Due date */}
+                      {todo.due_date ? (
+                        <button
+                          onClick={() => onUpdate(todo.id, { due_date: null })}
+                          className={`text-xs opacity-0 group-hover:opacity-100 shrink-0 ${darkMode ? "text-gray-600 hover:text-red-400" : "text-gray-300 hover:text-red-500"}`}
+                          title="Remove due date"
+                        >
+                          &#x2715;&#x1F4C5;
+                        </button>
+                      ) : (
+                        <label className="opacity-0 group-hover:opacity-100 shrink-0 cursor-pointer relative" title="Set due date">
+                          <span className={`text-xs ${darkMode ? "text-gray-500" : "text-gray-400"}`}>&#128197;</span>
+                          <input
+                            type="date"
+                            value=""
+                            onChange={(e) => { if (e.target.value) onUpdate(todo.id, { due_date: e.target.value }); }}
+                            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                            style={{ colorScheme: darkMode ? "dark" : "light" }}
+                          />
+                        </label>
+                      )}
+                      {/* Recurring */}
+                      <select
+                        value={todo.recurring || ""}
+                        onChange={(e) => onUpdate(todo.id, { recurring: e.target.value || null })}
+                        className={`text-xs opacity-0 group-hover:opacity-100 shrink-0 bg-transparent cursor-pointer ${darkMode ? "text-gray-500" : "text-gray-400"}`}
+                        title="Set recurring"
+                        style={{ width: "16px" }}
+                      >
+                        {RECURRING_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => onDelete(todo.id)}
+                        className={`text-sm font-bold hover:text-red-500 hover:bg-red-50 rounded px-1 opacity-0 group-hover:opacity-100 shrink-0 transition-all ${darkMode ? "text-gray-600" : "text-gray-400"}`}
+                        title="Delete todo"
+                      >
+                        &#10005;
+                      </button>
+                    </li>
+                  )}
+                </Draggable>
+  );
 
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase text-gray-400 mb-2">
-        Todos ({activeTodos.length})
+      <h3 className={`text-xs font-semibold uppercase ${labelColor} mb-2`}>
+        Todos ({mainTodos.length})
       </h3>
 
       {/* Add new */}
@@ -50,75 +213,78 @@ export default function TodoList({ todos, onAdd, onUpdate, onDelete }: Props) {
           onChange={(e) => setNewText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
           placeholder="Add todo..."
-          className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+          className={`flex-1 text-sm px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 ${inputBg}`}
         />
         <button
           onClick={handleAdd}
-          className="text-sm px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600"
+          className={`text-sm px-2 py-1 rounded ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}`}
         >
           +
         </button>
       </div>
 
       {/* Active todos */}
-      <ul className="space-y-1">
-        {activeTodos.map((todo) => (
-          <li key={todo.id} className="flex items-start gap-2 group">
-            <input
-              type="checkbox"
-              checked={false}
-              onChange={() => onUpdate(todo.id, { completed: true })}
-              className="mt-1 shrink-0"
-            />
-            {editingId === todo.id ? (
-              <input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => saveEdit(todo.id)}
-                onKeyDown={(e) => e.key === "Enter" && saveEdit(todo.id)}
-                className="flex-1 text-sm border-b border-blue-500 outline-none bg-transparent"
-                autoFocus
-              />
-            ) : (
-              <span
-                className="flex-1 text-sm cursor-pointer hover:text-blue-600"
-                onClick={() => startEdit(todo)}
-              >
-                {todo.text}
-              </span>
-            )}
-            <button
-              onClick={() => onDelete(todo.id)}
-              className="text-sm font-bold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded px-1 opacity-0 group-hover:opacity-100 shrink-0 transition-all"
-              title="Delete todo"
-            >
-              ✕
-            </button>
-          </li>
-        ))}
-      </ul>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="todos">
+          {(provided) => (
+            <ul className="space-y-1" ref={provided.innerRef} {...provided.droppableProps}>
+              {mainTodos.map((todo, index) => renderTodo(todo, index))}
+              {provided.placeholder}
+            </ul>
+          )}
+        </Droppable>
 
-      {/* Completed */}
-      {completedTodos.length > 0 && (
+        {/* Backlog */}
+        <Droppable droppableId="backlog">
+          {(provided, snapshot) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className={`mt-3 rounded ${snapshot.isDraggingOver ? (darkMode ? "bg-gray-700/50" : "bg-blue-50") : ""}`}
+            >
+              <button
+                onClick={() => setBacklogOpen((o) => !o)}
+                className={`flex items-center gap-1 text-xs font-semibold uppercase ${labelColor} mb-2`}
+                title={backlogOpen ? "Collapse backlog" : "Expand backlog"}
+              >
+                <span className="w-3">{backlogOpen ? "▾" : "▸"}</span>
+                Backlog ({backlogTodos.length})
+              </button>
+              {backlogOpen && (
+                <ul className="space-y-1 min-h-[1.5rem]">
+                  {backlogTodos.map((todo, index) => renderTodo(todo, index))}
+                  {backlogTodos.length === 0 && (
+                    <li className={`text-xs ${darkMode ? "text-gray-600" : "text-gray-300"}`}>Drag todos here</li>
+                  )}
+                </ul>
+              )}
+              <div className={backlogOpen ? "" : "hidden"}>{provided.placeholder}</div>
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+
+      {/* Completed this week */}
+      {completedThisWeek.length > 0 && (
         <details className="mt-2">
-          <summary className="text-xs text-gray-400 cursor-pointer">
-            {completedTodos.length} completed
+          <summary className={`text-xs cursor-pointer ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+            {completedThisWeek.length} completed this week
           </summary>
           <ul className="space-y-1 mt-1">
-            {completedTodos.map((todo) => (
+            {completedThisWeek.map((todo) => (
               <li key={todo.id} className="flex items-start gap-2 group">
                 <input
                   type="checkbox"
                   checked={true}
-                  onChange={() => onUpdate(todo.id, { completed: false })}
+                  onChange={() => onUpdate(todo.id, { completed: false, completed_at: null })}
                   className="mt-1 shrink-0"
                 />
-                <span className="flex-1 text-sm line-through text-gray-400">
-                  {todo.text}
+                <span className={`flex-1 text-sm line-through ${darkMode ? "text-gray-600" : "text-gray-400"}`}>
+                  {todo.completed_at && `${new Date(todo.completed_at).toLocaleDateString("en-US", { month: "numeric", day: "numeric" })} `}{todo.text}
                 </span>
                 <button
                   onClick={() => onDelete(todo.id)}
-                  className="text-xs text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 shrink-0"
+                  className={`text-xs opacity-0 group-hover:opacity-100 shrink-0 ${darkMode ? "text-gray-600 hover:text-red-400" : "text-gray-300 hover:text-red-500"}`}
                 >
                   x
                 </button>
