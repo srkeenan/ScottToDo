@@ -95,6 +95,17 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [view, setView] = useState<"dashboard" | "history" | "calendar">("dashboard");
   const [mobileTab, setMobileTab] = useState<string | null>(null);
+  const [addingProject, setAddingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  function submitNewProject() {
+    const name = newProjectName.trim();
+    setAddingProject(false);
+    setNewProjectName("");
+    if (name) addProject(name);
+  }
 
   const fetchAll = useCallback(async () => {
     try {
@@ -209,6 +220,38 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       const updated = await res.json();
       setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
     }
+  }
+
+  async function addProject(name: string) {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      const created = await res.json();
+      setProjects((prev) => [...prev, created]);
+    }
+  }
+
+  async function reorderProjects(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
+    const from = projects.findIndex((p) => p.id === draggedId);
+    const to = projects.findIndex((p) => p.id === targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...projects];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setProjects(next.map((p, i) => ({ ...p, sort_order: i })));
+
+    await fetch("/api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: "projects",
+        items: next.map((p, i) => ({ id: p.id, sort_order: i })),
+      }),
+    });
   }
 
   async function addTodo(projectId: string, text: string) {
@@ -475,6 +518,32 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
             </button>
           )}
 
+          {/* Add project */}
+          {addingProject ? (
+            <input
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onBlur={submitNewProject}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNewProject();
+                if (e.key === "Escape") {
+                  setNewProjectName("");
+                  setAddingProject(false);
+                }
+              }}
+              placeholder="Project name"
+              className={`text-sm px-3 py-1.5 rounded-lg w-36 ${inputBg} focus:outline-none focus:ring-1 focus:ring-green-400`}
+              autoFocus
+            />
+          ) : (
+            <button
+              onClick={() => setAddingProject(true)}
+              className="text-sm px-3 py-1.5 rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+            >
+              + Project
+            </button>
+          )}
+
           {/* Dark mode toggle */}
           <button
             onClick={toggleDarkMode}
@@ -545,7 +614,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                 <button
                   key={project.id}
                   onClick={() => toggleCollapse(project.id)}
-                  className={`w-10 ${cardBg} hover:opacity-80 rounded-lg items-center justify-center cursor-pointer transition-colors shrink-0 hidden md:flex`}
+                  onDragOver={(e) => { if (dragId) { e.preventDefault(); setDragOverId(project.id); } }}
+                  onDrop={(e) => { e.preventDefault(); if (dragId) reorderProjects(dragId, project.id); setDragId(null); setDragOverId(null); }}
+                  className={`w-10 ${cardBg} hover:opacity-80 rounded-lg items-center justify-center cursor-pointer transition-colors shrink-0 hidden md:flex ${dragOverId === project.id && dragId !== project.id ? "ring-2 ring-white/60" : ""}`}
                   title={`Expand ${project.name}`}
                 >
                   <span
@@ -564,7 +635,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
             return (
               <div
                 key={project.id}
-                className={`flex-1 min-w-0 min-h-0 ${isMobileHidden ? "hidden md:block" : ""}`}
+                onDragOver={(e) => { if (dragId) { e.preventDefault(); setDragOverId(project.id); } }}
+                onDrop={(e) => { e.preventDefault(); if (dragId) reorderProjects(dragId, project.id); setDragId(null); setDragOverId(null); }}
+                className={`flex-1 min-w-0 min-h-0 rounded-lg ${isMobileHidden ? "hidden md:block" : ""} ${dragOverId === project.id && dragId !== project.id ? "ring-2 ring-white/60" : ""} ${dragId === project.id ? "opacity-50" : ""}`}
                 style={{
                   flexBasis: `${100 / expandedProjects.length}%`,
                 }}
@@ -576,6 +649,8 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                   contacts={filteredContacts.filter((c) => c.project_id === project.id).sort((a, b) => a.sort_order - b.sort_order)}
                   notes={filteredNotes.filter((n) => n.project_id === project.id).sort((a, b) => a.sort_order - b.sort_order)}
                   onCollapse={() => toggleCollapse(project.id)}
+                  onProjectDragStart={() => setDragId(project.id)}
+                  onProjectDragEnd={() => { setDragId(null); setDragOverId(null); }}
                   onUpdateProject={(updates) => updateProject(project.id, updates)}
                   onAddTodo={(text) => addTodo(project.id, text)}
                   onUpdateTodo={updateTodo}

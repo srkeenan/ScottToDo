@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { isAuthenticated } from "@/lib/auth";
 
-const ALLOWED_TABLES = ["todos", "decisions", "contacts", "notes"];
+const ALLOWED_TABLES = ["todos", "decisions", "contacts", "notes", "projects"];
 
 export async function POST(request: NextRequest) {
   if (!(await isAuthenticated(request))) {

@@ -33,6 +33,8 @@ interface Props {
   contacts: Contact[];
   notes: Note[];
   onCollapse: () => void;
+  onProjectDragStart?: () => void;
+  onProjectDragEnd?: () => void;
   onUpdateProject: (updates: Partial<Project>) => void;
   onAddTodo: (text: string) => void;
   onUpdateTodo: (id: string, updates: Partial<Todo>) => void;
@@ -62,6 +64,8 @@ export default function ProjectLane({
   contacts,
   notes,
   onCollapse,
+  onProjectDragStart,
+  onProjectDragEnd,
   onUpdateProject,
   onAddTodo,
   onUpdateTodo,
@@ -110,6 +114,19 @@ export default function ProjectLane({
     <div className={`${cardBg} rounded-lg shadow-sm border ${cardBorder} h-full flex flex-col overflow-hidden`}>
       {/* Header */}
       <div className={`px-4 py-3 border-b ${headerBorder} flex items-center gap-2 shrink-0 ${laneColor ? (darkMode ? `${laneColor.darkBg} ${laneColor.darkBorder}` : `${laneColor.bg} ${laneColor.border}`) : ""}`}>
+        <span
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", project.id);
+            onProjectDragStart?.();
+          }}
+          onDragEnd={onProjectDragEnd}
+          className={`${collapseColor} cursor-grab active:cursor-grabbing select-none hidden md:block`}
+          title="Drag to reorder"
+        >
+          &#8942;&#8942;
+        </span>
         <button
           onClick={onCollapse}
           className={`${collapseColor} text-lg leading-none hidden md:block`}
