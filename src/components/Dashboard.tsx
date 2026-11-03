@@ -159,9 +159,11 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   }, [decisions, searchQuery]);
 
   const filteredContacts = useMemo(() => {
-    if (!searchQuery) return contacts;
+    const today = new Date().toISOString().split("T")[0];
+    const active = contacts.filter((c) => !c.meeting_date || c.meeting_date >= today);
+    if (!searchQuery) return active;
     const q = searchQuery.toLowerCase();
-    return contacts.filter((c) =>
+    return active.filter((c) =>
       c.name.toLowerCase().includes(q) ||
       (c.role && c.role.toLowerCase().includes(q)) ||
       (c.email && c.email.toLowerCase().includes(q))
@@ -426,7 +428,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const expandedProjects = projects.filter((p) => !collapsed.has(p.id));
 
   return (
-    <div className="min-h-screen p-4 relative" style={{ backgroundColor: bgColor }}>
+    <div className="h-screen flex flex-col overflow-hidden p-4" style={{ backgroundColor: bgColor }}>
       {/* Demo banner */}
       {isDemo && (
         <div className="mb-2 px-4 py-1.5 text-white/50 text-xs text-center">
@@ -434,7 +436,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         </div>
       )}
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="flex items-center gap-3 mb-4 flex-wrap shrink-0">
         <h1 className="text-2xl font-bold text-white">ScottToDo</h1>
 
         {/* Search */}
@@ -490,7 +492,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       </div>
 
       {/* Mobile tab bar */}
-      <div className="flex gap-1 mb-3 overflow-x-auto md:hidden">
+      <div className="flex gap-1 mb-3 overflow-x-auto md:hidden shrink-0">
         {projects.map((p) => (
           <button
             key={p.id}
@@ -507,27 +509,31 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       </div>
 
       {view === "history" ? (
-        <HistoryView
-          todos={historyTodos}
-          decisions={historyDecisions}
-          projects={projects}
-          darkMode={darkMode}
-          projectColorMap={projectColorMap}
-          onRestoreTodo={(id) => updateTodo(id, { completed: false, completed_at: null })}
-          onRestoreDecision={(id) => updateDecision(id, { archived: false })}
-        />
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <HistoryView
+            todos={historyTodos}
+            decisions={historyDecisions}
+            projects={projects}
+            darkMode={darkMode}
+            projectColorMap={projectColorMap}
+            onRestoreTodo={(id) => updateTodo(id, { completed: false, completed_at: null })}
+            onRestoreDecision={(id) => updateDecision(id, { archived: false })}
+          />
+        </div>
       ) : view === "calendar" ? (
-        <CalendarView
-          todos={calendarTodos}
-          meetings={contacts}
-          projects={projects}
-          darkMode={darkMode}
-          projectColorMap={projectColorMap}
-          onUpdateTodo={updateTodo}
-          onUpdateContact={updateContact}
-        />
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <CalendarView
+            todos={calendarTodos}
+            meetings={contacts}
+            projects={projects}
+            darkMode={darkMode}
+            projectColorMap={projectColorMap}
+            onUpdateTodo={updateTodo}
+            onUpdateContact={updateContact}
+          />
+        </div>
       ) : (
-        <div className="flex gap-2 min-h-[calc(100vh-5rem)] max-md:flex-col">
+        <div className="flex gap-2 flex-1 min-h-0 max-md:flex-col max-md:overflow-y-auto">
           {projects.map((project) => {
             const isCollapsed = collapsed.has(project.id);
 
@@ -558,7 +564,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
             return (
               <div
                 key={project.id}
-                className={`flex-1 min-w-0 ${isMobileHidden ? "hidden md:block" : ""}`}
+                className={`flex-1 min-w-0 min-h-0 ${isMobileHidden ? "hidden md:block" : ""}`}
                 style={{
                   flexBasis: `${100 / expandedProjects.length}%`,
                 }}

@@ -70,15 +70,27 @@ export async function POST(request: NextRequest) {
   const subject = body.Subject || "(no subject)";
   let textBody = body.TextBody || body.HtmlBody || "";
 
-  // --- SENDER FILTERING ---
-  // Check if sender is the owner
-  const isFromOwner = OWNER_EMAILS.length > 0 ? OWNER_EMAILS.includes(fromLower) : true;
-
-  // Check if admin@ is in To vs Cc
+  // --- RECIPIENT FILTERING (conserve Postmark quota) ---
+  // Only process emails where admin@ is explicitly in the To field.
+  // Emails that weren't sent directly to admin@ (e.g. catch-all delivery) are ignored.
   const toAddresses = (body.ToFull || []).map((t: { Email: string }) => t.Email.toLowerCase());
   const ccAddresses = (body.CcFull || []).map((c: { Email: string }) => c.Email.toLowerCase());
   const adminInTo = toAddresses.includes(ADMIN_EMAIL);
   const adminInCc = ccAddresses.includes(ADMIN_EMAIL);
+
+  if (!adminInTo && !adminInCc) {
+    console.log(`[ingest] ⏭️ Skipped: ${ADMIN_EMAIL} is not in To or Cc — email not addressed to admin`);
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: `${ADMIN_EMAIL} not found in To or Cc`,
+      created: { todos: 0, decisions: 0, notes: 0 },
+    });
+  }
+
+  // --- SENDER FILTERING ---
+  // Check if sender is the owner
+  const isFromOwner = OWNER_EMAILS.length > 0 ? OWNER_EMAILS.includes(fromLower) : true;
 
   // Also check Delivered-To header (for forwarded emails)
   const deliveredTo = (body.Headers || []).find((h: { Name: string; Value: string }) => h.Name === "Delivered-To")?.Value?.toLowerCase() || "";
